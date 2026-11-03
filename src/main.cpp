@@ -61,10 +61,19 @@ void setup() {
     buttonInput.begin();
 
     // SRS 6.1 steps 7-8: Execute gyroscope calibration (automatic at startup, NFR-008).
-    Serial.println(F("Calibrating gyroscope... keep device still"));
+    // Reuse saved bias from flash if available to avoid 2.5 s calibration on every boot.
+    Serial.println(F("Loading gyro calibration..."));
     systemState.transitionTo(SystemState_t::CALIBRATING);
-    if (!calibration.calibrate(mpu, GyroConfig::CALIBRATION_SAMPLES)) {
-        Serial.println(F("WARN: calibration failed, using zero bias"));
+    bool usedSavedBias = calibration.loadBias();
+    if (!usedSavedBias) {
+        Serial.println(F("Calibrating gyroscope... keep device still"));
+        if (!calibration.calibrate(mpu, GyroConfig::CALIBRATION_SAMPLES)) {
+            Serial.println(F("WARN: calibration failed, using zero bias"));
+        } else {
+            calibration.saveBias();
+        }
+    } else {
+        Serial.println(F("Using saved gyro calibration from flash"));
     }
     float bx, by, bz;
     calibration.getBias(bx, by, bz);
@@ -187,6 +196,7 @@ void loop() {
         Serial.println(F("Recalibrating gyroscope... keep still"));
         systemState.transitionTo(SystemState_t::CALIBRATING);
         if (calibration.calibrate(mpu, GyroConfig::CALIBRATION_SAMPLES)) {
+            calibration.saveBias();
             float bx, by, bz;
             calibration.getBias(bx, by, bz);
             Serial.print(F("Recalibration complete. Bias: "));
